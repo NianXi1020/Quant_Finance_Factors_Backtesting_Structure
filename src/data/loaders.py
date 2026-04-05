@@ -183,6 +183,11 @@ def load_delist_data(delist_path: Path) -> pd.DataFrame:
 
     Missing delist date => still alive.
     """
+    if not delist_path.exists():
+        raise FileNotFoundError(
+            f"Delisting file not found at {delist_path}. "
+            "Expected path: data/raw/A_share_data/Delisting/delisting.csv"
+        )
     raw = _read_csv(delist_path)
     renamed = raw.rename(columns=DELIST_COL_MAP)
 

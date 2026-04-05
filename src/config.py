@@ -20,7 +20,7 @@ class DataConfig:
     root: Path = Path("data/raw/A_share_data")
     daily_path: Path = Path("data/raw/A_share_data/daily_hfq")
     stock_list_path: Path = Path("data/raw/A_share_data/Stock_list.csv")
-    delist_path: Path = Path("data/raw/A_share_data/delist.csv")
+    delist_path: Path = Path("data/raw/A_share_data/Delisting/delisting.csv")
 
 
 @dataclass(frozen=True)

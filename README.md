@@ -64,6 +64,12 @@ data/raw/A_share_data/daily_hfq/
 ├── ...
 ```
 
+And delisting data is expected at:
+
+```text
+data/raw/A_share_data/Delisting/delisting.csv
+```
+
 The default paths are configured in `src/config.py`.
 2. Run:
 
