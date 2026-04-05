@@ -85,6 +85,26 @@ This table includes daily panel fields such as universe flags, momentum factor v
 
 ---
 
+## Notebook usage (showcase / inspection)
+
+The demo notebook is:
+
+- `notebooks/stage1_momentum_factor_showcase.ipynb`
+
+Recommended usage:
+
+1. Start Jupyter from project root:
+
+```bash
+jupyter lab
+```
+
+2. Open `notebooks/stage1_momentum_factor_showcase.ipynb`.
+
+The first code cell includes a small `sys.path` setup so `from src...` imports work even when the notebook kernel runs with `notebooks/` as working directory.
+
+---
+
 ## Roadmap
 
 This repository is currently **Stage 1**, focused on momentum single-factor research and clean pipeline foundations.  
