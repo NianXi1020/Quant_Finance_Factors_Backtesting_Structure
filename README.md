@@ -105,6 +105,27 @@ The first code cell includes a small `sys.path` setup so `from src...` imports w
 
 ---
 
+## Parallel performance settings
+
+To improve CPU utilization on large universes, Stage-1 now supports optional process-based parallelism in the main bottlenecks:
+
+- **Daily HFQ loading/cleaning** across many `*_daily_hfq.csv` files
+- **Per-stock momentum computation** (independent by stock)
+
+Controls are in `src/config.py` (`RuntimeConfig`):
+
+- `use_parallel` (default `True`)
+- `n_jobs` (default `max(1, os.cpu_count()-1)`)
+- `verbose_timing` (print simple stage timing logs)
+
+Notes/caveats:
+
+- A **serial fallback path** is always available by setting `use_parallel=False` or `n_jobs=1` (useful for debugging/repro checks).
+- Process-based parallelism may increase memory usage because workers hold intermediate DataFrames.
+- Final concatenation/sorting still enforces deterministic date/stock ordering and preserves signal/return alignment logic.
+
+---
+
 ## Roadmap
 
 This repository is currently **Stage 1**, focused on momentum single-factor research and clean pipeline foundations.  

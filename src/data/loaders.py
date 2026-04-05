@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Iterable
+from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
 
@@ -99,7 +100,57 @@ def load_daily_data_single_file(csv_path: Path) -> pd.DataFrame:
     return cleaned.reset_index(drop=True)
 
 
-def load_daily_data(daily_path: Path) -> pd.DataFrame:
+def _clean_daily_file(file_path: Path) -> pd.DataFrame:
+    """Per-file cleaner used by both serial and process-parallel loaders."""
+    raw = _read_csv(file_path)
+    renamed = raw.rename(columns=DAILY_COL_MAP)
+    required = ["date", "close"]
+    missing = [c for c in required if c not in renamed.columns]
+    if missing:
+        raise ValueError(f"{file_path} missing required columns: {missing}")
+
+    # Some vendor files may omit stock code; infer from filename if needed.
+    if "stock_code" not in renamed.columns:
+        inferred = _infer_stock_code_from_filename(file_path)
+        if inferred is None:
+            raise ValueError(
+                f"{file_path} has no 股票代码 column and filename does not match `000001_daily_hfq.csv`."
+            )
+        renamed["stock_code"] = inferred
+
+    keep_cols = [v for v in DAILY_COL_MAP.values() if v in renamed.columns]
+    cleaned = renamed[keep_cols].copy()
+    cleaned["date"] = _parse_cn_date(cleaned["date"])
+    cleaned["stock_code"] = normalize_stock_code(cleaned["stock_code"])
+
+    numeric_cols = [
+        c
+        for c in [
+            "open",
+            "close",
+            "high",
+            "low",
+            "volume",
+            "amount",
+            "amplitude",
+            "pct_change",
+            "price_change",
+            "turnover",
+        ]
+        if c in cleaned.columns
+    ]
+    for c in numeric_cols:
+        cleaned[c] = pd.to_numeric(cleaned[c], errors="coerce")
+
+    cleaned = cleaned.dropna(subset=["date", "stock_code"]).sort_values("date")
+    return cleaned
+
+
+def load_daily_data(
+    daily_path: Path,
+    use_parallel: bool = True,
+    n_jobs: int = 1,
+) -> pd.DataFrame:
     """Load and clean daily OHLCV-like data.
 
     Current default mode expects a directory containing per-stock files
@@ -112,52 +163,14 @@ def load_daily_data(daily_path: Path) -> pd.DataFrame:
     Key anti-look-ahead assumption:
     - `date` is trade date; later pipeline must shift factor->position before return calc.
     """
-    frames: list[pd.DataFrame] = []
-    for file_path in _iter_daily_files_from_dir(daily_path, pattern="*_daily_hfq.csv"):
-        raw = _read_csv(file_path)
-        renamed = raw.rename(columns=DAILY_COL_MAP)
-        required = ["date", "close"]
-        missing = [c for c in required if c not in renamed.columns]
-        if missing:
-            raise ValueError(f"{file_path} missing required columns: {missing}")
+    files = list(_iter_daily_files_from_dir(daily_path, pattern="*_daily_hfq.csv"))
+    parallel = use_parallel and n_jobs > 1 and len(files) > 1
 
-        # Some vendor files may omit stock code; infer from filename if needed.
-        if "stock_code" not in renamed.columns:
-            inferred = _infer_stock_code_from_filename(file_path)
-            if inferred is None:
-                raise ValueError(
-                    f"{file_path} has no 股票代码 column and filename does not match `000001_daily_hfq.csv`."
-                )
-            renamed["stock_code"] = inferred
-
-        # Keep only known columns if present; this makes schema explicit and stable.
-        keep_cols = [v for v in DAILY_COL_MAP.values() if v in renamed.columns]
-        cleaned = renamed[keep_cols].copy()
-
-        cleaned["date"] = _parse_cn_date(cleaned["date"])
-        cleaned["stock_code"] = normalize_stock_code(cleaned["stock_code"])
-
-        numeric_cols = [
-            c
-            for c in [
-                "open",
-                "close",
-                "high",
-                "low",
-                "volume",
-                "amount",
-                "amplitude",
-                "pct_change",
-                "price_change",
-                "turnover",
-            ]
-            if c in cleaned.columns
-        ]
-        for c in numeric_cols:
-            cleaned[c] = pd.to_numeric(cleaned[c], errors="coerce")
-
-        cleaned = cleaned.dropna(subset=["date", "stock_code"]).sort_values("date")
-        frames.append(cleaned)
+    if parallel:
+        with ProcessPoolExecutor(max_workers=n_jobs) as ex:
+            frames = list(ex.map(_clean_daily_file, files))
+    else:
+        frames = [_clean_daily_file(file_path) for file_path in files]
 
     out = pd.concat(frames, ignore_index=True)
     out = ensure_ts_code(out)

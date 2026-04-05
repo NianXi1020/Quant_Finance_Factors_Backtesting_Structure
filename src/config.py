@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 
 
 @dataclass(frozen=True)
@@ -30,9 +31,20 @@ class UniverseConfig:
 
 
 @dataclass(frozen=True)
+class RuntimeConfig:
+    """Execution controls for performance/debugging."""
+
+    use_parallel: bool = True
+    # Default to all available logical CPUs minus one, minimum 1.
+    n_jobs: int = max(1, (os.cpu_count() or 1) - 1)
+    verbose_timing: bool = True
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     """Top-level pipeline settings."""
 
     data: DataConfig = DataConfig()
     universe: UniverseConfig = UniverseConfig()
+    runtime: RuntimeConfig = RuntimeConfig()
     factor_lookback_days: int = 20

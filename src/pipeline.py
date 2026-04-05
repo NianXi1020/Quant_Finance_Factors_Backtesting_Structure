@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+import time
 
 import pandas as pd
 
@@ -19,10 +20,19 @@ def run_pipeline(config: PipelineConfig | None = None) -> pd.DataFrame:
       - signal shifted to t+1 within each stock
     """
     cfg = config or PipelineConfig()
+    n_jobs = max(1, int(cfg.runtime.n_jobs))
 
-    daily = load_daily_data(Path(cfg.data.daily_path))
+    t0 = time.perf_counter()
+    daily = load_daily_data(
+        Path(cfg.data.daily_path),
+        use_parallel=cfg.runtime.use_parallel,
+        n_jobs=n_jobs,
+    )
+    t1 = time.perf_counter()
+
     stock_meta = load_stock_list(Path(cfg.data.stock_list_path))
     delist = load_delist_data(Path(cfg.data.delist_path))
+    t2 = time.perf_counter()
 
     panel = attach_universe_flags(
         daily_df=daily,
@@ -31,8 +41,14 @@ def run_pipeline(config: PipelineConfig | None = None) -> pd.DataFrame:
         min_listing_days=cfg.universe.min_listing_days,
     )
 
-    panel = compute_momentum_factor(panel, lookback_days=cfg.factor_lookback_days)
+    panel = compute_momentum_factor(
+        panel,
+        lookback_days=cfg.factor_lookback_days,
+        use_parallel=cfg.runtime.use_parallel,
+        n_jobs=n_jobs,
+    )
     panel["mom_ind_neutral"] = zscore_cross_section(panel, value_col="mom_raw", group_col="industry")
+    t3 = time.perf_counter()
 
     # Strict anti-look-ahead: trading signal at date t uses factor from t-1.
     panel = panel.sort_values(["stock_code", "date"])
@@ -43,6 +59,16 @@ def run_pipeline(config: PipelineConfig | None = None) -> pd.DataFrame:
 
     # Keep data only when eligible for trading universe on signal date.
     panel["tradable"] = panel["in_universe"] & panel["signal"].notna()
+
+    if cfg.runtime.verbose_timing:
+        print(
+            "[timing] "
+            f"daily_load={t1 - t0:.2f}s, "
+            f"meta_load={t2 - t1:.2f}s, "
+            f"factor_and_signal={t3 - t2:.2f}s, "
+            f"total={t3 - t0:.2f}s, "
+            f"use_parallel={cfg.runtime.use_parallel}, n_jobs={n_jobs}"
+        )
 
     return panel.reset_index(drop=True)
 
