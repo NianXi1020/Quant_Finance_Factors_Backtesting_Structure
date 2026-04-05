@@ -91,6 +91,17 @@ class FactorConfig:
 
 
 @dataclass(frozen=True)
+class EvalConfig:
+    """Evaluation defaults for long-short backtests."""
+
+    weighting: str = "equal"
+    long_short_mode: str = "cross_sectional"
+    rebalance_freq: str = "D"
+    n_quantiles: int = 10
+    min_valid_obs: int = 20
+
+
+@dataclass(frozen=True)
 class LogConfig:
     """Lightweight progress logging options."""
 
@@ -117,6 +128,7 @@ class PipelineConfig:
     cache: CacheConfig = CacheConfig()
     storage: StorageConfig = StorageConfig()
     factor: FactorConfig = FactorConfig()
+    evaluation: EvalConfig = EvalConfig()
     log: LogConfig = LogConfig()
     debug: DebugConfig = DebugConfig()
     factor_lookback_days: int = 20

@@ -167,11 +167,53 @@ Default paths are defined in `src/config.py`.
 
 ---
 
-## Run
+## Run (registry-driven orchestration)
 
 ```bash
 python -m src.main
 ```
+
+Default behavior:
+- scans all registered factors,
+- reuses cached shared artifacts,
+- runs only missing/incomplete factors,
+- skips completed factors.
+
+### CLI examples
+
+```bash
+# Run all factors incrementally (default)
+python -m src.main
+
+# Run specific factors
+python -m src.main --factors rs_30 rs_90 macd
+
+# Run all factors in one group
+python -m src.main --group momentum
+
+# Force rerun selected factors
+python -m src.main --factors rs_60 --force
+
+# Compute factors only (skip evaluation)
+python -m src.main --group momentum --skip-evaluation
+
+# Re-evaluate existing factor files only
+python -m src.main --factors rs_60 macd --run-evaluation-only
+```
+
+Core defaults:
+- `only_missing=True` (incremental mode),
+- `force=False`,
+- `use_cached_interim=True`,
+- long-short mode = cross-sectional,
+- weighting = equal,
+- rebalance = daily,
+- quantiles = 10.
+
+### Migration note
+
+- Pipeline now runs through a factor registry by default instead of one hardcoded factor.
+- Per-factor outputs include `run_metadata.json` and diagnostics CSVs for skip/valid-date transparency.
 
 ---
 
