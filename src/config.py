@@ -52,6 +52,18 @@ class CacheConfig:
 
 
 @dataclass(frozen=True)
+class StageConfig:
+    """Run/skip control for staged workflow."""
+
+    run_cleaning: bool = True
+    run_universe: bool = True
+    run_labels: bool = True
+    run_factor: bool = True
+    run_evaluation: bool = True
+    use_cached_interim: bool = True
+
+
+@dataclass(frozen=True)
 class StorageConfig:
     """Standardized storage layout for interim/processed/output artifacts."""
 
@@ -73,8 +85,9 @@ class FactorConfig:
 
     family: str = "momentum"
     name: str = "rs"
-    lookback: int = 20
+    lookback: int = 30
     quantiles: int = 5
+    eval_signal_col: str = "factor_indneu"
 
 
 @dataclass(frozen=True)
@@ -100,6 +113,7 @@ class PipelineConfig:
     data: DataConfig = DataConfig()
     universe: UniverseConfig = UniverseConfig()
     runtime: RuntimeConfig = RuntimeConfig()
+    stage: StageConfig = StageConfig()
     cache: CacheConfig = CacheConfig()
     storage: StorageConfig = StorageConfig()
     factor: FactorConfig = FactorConfig()

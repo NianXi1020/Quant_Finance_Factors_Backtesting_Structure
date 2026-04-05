@@ -7,7 +7,13 @@ This repository is Stage-1 of an A-share single-factor research pipeline, curren
 - CN raw data loading and schema standardization (daily HFQ, stock list, delisting)
 - Reusable universe construction (`is_alive`, listing-age filter, `in_universe`)
 - Reusable forward return label (`fwd_1d_return`)
-- Momentum factor generation (e.g., `rs_20`) with winsorization/z-score/industry-neutral variants
+- Momentum / price-volume factors with winsorization/z-score/industry-neutral variants:
+  - `rs_{30,60,90,180}`
+  - `hl_{30,60,90,180}`
+  - `vol_{30,60,90,180}`
+  - `turnover_{30,60,90,180}`
+  - `improved_mom_{30,60,90,180}`
+  - `macd` family (`dif`, `dea`, `macd_bar`)
 - IC / Rank-IC analysis outputs
 - Quantile backtest outputs (including long-short summary)
 - Process-based parallelism for heavy stages (daily file cleaning and per-stock factor computation)
@@ -38,8 +44,8 @@ data/interim/
 data/processed/
   factors/
     momentum/
-      rs_20.parquet
-      rs_40.parquet
+      rs_30.parquet
+      rs_60.parquet
       ...
   manifest/
     factor_registry.csv
@@ -54,7 +60,7 @@ Each factor file stores only factor-relevant columns (not full OHLCV table), e.g
 outputs/
   single_factor/
     momentum/
-      rs_20/
+      rs_30/
         ic_analysis/
         quantile_backtest/
         stability/
@@ -91,6 +97,21 @@ Typical behavior:
 - if cached artifact exists and force flag is `False`, pipeline loads cache directly;
 - if raw data changes, set corresponding `force_rebuild_* = True`.
 
+### Stage run controls
+
+`StageConfig` in `src/config.py` supports:
+
+- `run_cleaning`
+- `run_universe`
+- `run_labels`
+- `run_factor`
+- `run_evaluation`
+- `use_cached_interim`
+
+This lets you run only incremental work, for example:
+- reuse cached interim (`run_cleaning=False`, `run_universe=False`, `run_labels=False`)
+- compute/evaluate only a new factor (`run_factor=True`, `run_evaluation=True`)
+
 ---
 
 ## Parallelism controls
@@ -120,6 +141,8 @@ Pipeline emits lightweight step logs such as:
 Controls in `LogConfig`:
 - `enabled`
 - `verbose`
+
+Each major stage prints shape-aware summaries (`rows`, `cols`, optional `n_ts`, `date_range`) and elapsed time.
 
 ---
 
