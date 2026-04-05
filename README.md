@@ -1,143 +1,167 @@
 # Quant Finance Factors Backtesting Structure (Stage 1)
 
-This project is the **first version** of an A-share single-factor research pipeline, currently focused on a **momentum factor** workflow.  
-It is designed with modular Python code under `src/` to keep data handling, factor construction, and research steps maintainable and extensible.
+This repository is Stage-1 of an A-share single-factor research pipeline, currently focused on **momentum** factors with strict anti-look-ahead conventions.
 
-## Current scope (implemented in Stage 1)
+## What is implemented now
 
-- **Data loading and cleaning**
-  - Explicit Chinese-to-English schema mapping
-  - Robust date parsing (`YYYYMMDD` / `YYYY-MM-DD`)
-  - Consistent `stock_code` / `ts_code` normalization
-  - Daily HFQ data loaded from a **directory of per-stock files** (`*_daily_hfq.csv`)
-- **Universe construction**
-  - Delisting-aware alive mask (`is_alive`)
-  - IPO listing-age filter (`is_old_enough`)
-  - Combined tradable universe flag (`in_universe`)
-- **Forward return label**
-  - 1-day forward return (`fwd_1d_return`) for evaluation
-- **Momentum factor construction**
-  - Simple cross-sectional momentum from rolling price change
-- **Factor preprocessing**
-  - Cross-sectional z-score
-  - Industry-aware neutralized version (`mom_ind_neutral`)
-  - 1-day signal lag (`signal`) to avoid look-ahead bias
-- **IC analysis**
-  - Demonstrated in showcase notebook (Spearman IC / ICIR)
-- **Quantile backtest**
-  - Demonstrated in showcase notebook (quantile group returns / long-short spread)
-- **Output saving**
-  - Pipeline output is saved to `output/pipeline_output.parquet`
+- CN raw data loading and schema standardization (daily HFQ, stock list, delisting)
+- Reusable universe construction (`is_alive`, listing-age filter, `in_universe`)
+- Reusable forward return label (`fwd_1d_return`)
+- Momentum factor generation (e.g., `rs_20`) with winsorization/z-score/industry-neutral variants
+- IC / Rank-IC analysis outputs
+- Quantile backtest outputs (including long-short summary)
+- Process-based parallelism for heavy stages (daily file cleaning and per-stock factor computation)
+- Staged caching to avoid recomputing expensive upstream data
 
 ---
 
-## Project structure
+## Storage layout (refactored)
+
+### 1) `data/interim/` (reusable shared artifacts)
 
 ```text
-.
-├── README.md
-├── src/
-│   ├── config.py                 # path and pipeline configuration
-│   ├── main.py                   # lightweight executable entrypoint
-│   ├── pipeline.py               # end-to-end pipeline orchestration
-│   ├── data/
-│   │   └── loaders.py            # raw CSV loading + cleaning + schema mapping
-│   ├── factors/
-│   │   └── basic.py              # momentum factor + z-score preprocessing
-│   ├── universe.py               # universe eligibility logic
-│   └── utils/
-│       └── identifiers.py        # stock_code / ts_code normalization helpers
-└── notebooks/
-    └── stage1_momentum_factor_showcase.ipynb
+data/interim/
+  panels/
+    daily_panel_clean.parquet
+  metadata/
+    stock_list_clean.parquet
+    delist_clean.parquet
+  universe/
+    universe_basic.parquet
+  labels/
+    forward_returns_1d.parquet
 ```
+
+### 2) `data/processed/` (factor-specific processed artifacts)
+
+```text
+data/processed/
+  factors/
+    momentum/
+      rs_20.parquet
+      rs_40.parquet
+      ...
+  manifest/
+    factor_registry.csv
+```
+
+Each factor file stores only factor-relevant columns (not full OHLCV table), e.g.:
+`date, ts_code, stock_code, factor_raw, factor_win, factor_z, factor_indneu`.
+
+### 3) `outputs/` (research/evaluation results)
+
+```text
+outputs/
+  single_factor/
+    momentum/
+      rs_20/
+        ic_analysis/
+        quantile_backtest/
+        stability/
+        summaries/
+        logs/
+```
+
+The pipeline writes IC summaries, Rank-IC summaries, quantile returns/NAV, long-short metrics, yearly stability tables, and factor run snapshots.
 
 ---
 
-## How to run the main pipeline
+## Pipeline stages
 
-1. Place your raw files under `data/raw/A_share_data/` and make sure daily data is organized as:
+- **Stage A**: clean raw daily/metadata/delisting and cache to `data/interim/`
+- **Stage B**: build reusable universe + labels and cache to `data/interim/`
+- **Stage C**: compute selected factor and store to `data/processed/factors/...`
+- **Stage D**: run IC + quantile evaluation and store artifacts under `outputs/single_factor/...`
+
+The previous single giant `pipeline_output.parquet` behavior is deprecated. A debug combined panel export exists but is **off by default**.
+
+---
+
+## Caching behavior
+
+Configured in `src/config.py`:
+
+- `use_cache`
+- `force_rebuild_cleaning`
+- `force_rebuild_universe`
+- `force_rebuild_labels`
+- `force_rebuild_factors`
+
+Typical behavior:
+- if cached artifact exists and force flag is `False`, pipeline loads cache directly;
+- if raw data changes, set corresponding `force_rebuild_* = True`.
+
+---
+
+## Parallelism controls
+
+Configured in `src/config.py` (`RuntimeConfig`):
+
+- `use_parallel` (default `True`)
+- `n_jobs` (default `max(1, os.cpu_count()-1)`)
+- `verbose_timing`
+
+Parallelized bottlenecks:
+- loading/cleaning many daily HFQ per-stock files
+- per-stock momentum computation
+
+Memory note: process-based parallelism can increase peak memory usage.
+
+---
+
+## Structured progress logging
+
+Pipeline emits lightweight step logs such as:
+
+- `[STEP] Stage A: Loading/Cleaning daily panel...`
+- `[OK] Daily panel ready (time=..., rows=...)`
+- `[PIPELINE COMPLETE] total time = ...s`
+
+Controls in `LogConfig`:
+- `enabled`
+- `verbose`
+
+---
+
+## Data location assumptions
+
+Daily HFQ files:
 
 ```text
 data/raw/A_share_data/daily_hfq/
-├── 000001_daily_hfq.csv
-├── 000002_daily_hfq.csv
-├── ...
+  000001_daily_hfq.csv
+  000002_daily_hfq.csv
+  ...
 ```
 
-And delisting data is expected at:
+Delisting file:
 
 ```text
 data/raw/A_share_data/Delisting/delisting.csv
 ```
 
-The default paths are configured in `src/config.py`.
-2. Run:
+Default paths are defined in `src/config.py`.
+
+---
+
+## Run
 
 ```bash
 python -m src.main
 ```
 
-(Equivalent: `python src/main.py`)
-
 ---
 
-## Output location
+## Notebook
 
-After successful execution, the main result table is saved to:
-
-- `output/pipeline_output.parquet`
-
-This table includes daily panel fields such as universe flags, momentum factor values, lagged signal, and forward return label.
-
----
-
-## Notebook usage (showcase / inspection)
-
-The demo notebook is:
-
+Demo notebook:
 - `notebooks/stage1_momentum_factor_showcase.ipynb`
 
-Recommended usage:
-
-1. Start Jupyter from project root:
-
-```bash
-jupyter lab
-```
-
-2. Open `notebooks/stage1_momentum_factor_showcase.ipynb`.
-
-The first code cell includes a small `sys.path` setup so `from src...` imports work even when the notebook kernel runs with `notebooks/` as working directory.
-
----
-
-## Parallel performance settings
-
-To improve CPU utilization on large universes, Stage-1 now supports optional process-based parallelism in the main bottlenecks:
-
-- **Daily HFQ loading/cleaning** across many `*_daily_hfq.csv` files
-- **Per-stock momentum computation** (independent by stock)
-
-Controls are in `src/config.py` (`RuntimeConfig`):
-
-- `use_parallel` (default `True`)
-- `n_jobs` (default `max(1, os.cpu_count()-1)`)
-- `verbose_timing` (print simple stage timing logs)
-
-Notes/caveats:
-
-- A **serial fallback path** is always available by setting `use_parallel=False` or `n_jobs=1` (useful for debugging/repro checks).
-- Process-based parallelism may increase memory usage because workers hold intermediate DataFrames.
-- Final concatenation/sorting still enforces deterministic date/stock ordering and preserves signal/return alignment logic.
+(Notebook is for presentation/inspection only; modular pipeline under `src/` is the primary workflow.)
 
 ---
 
 ## Roadmap
 
-This repository is currently **Stage 1**, focused on momentum single-factor research and clean pipeline foundations.  
-Later stages are planned to cover:
-
-- multi-factor modeling
-- return prediction workflows
-- portfolio construction and optimization
-- expanded backtesting and risk diagnostics
+Current stage focuses on momentum single-factor research infrastructure.
+Planned next stages include multi-factor modeling, return prediction, portfolio construction/optimization, and expanded diagnostics.

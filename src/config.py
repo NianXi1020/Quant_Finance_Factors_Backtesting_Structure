@@ -41,10 +41,68 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True)
+class CacheConfig:
+    """Cache/rebuild controls for staged artifacts."""
+
+    use_cache: bool = True
+    force_rebuild_cleaning: bool = False
+    force_rebuild_universe: bool = False
+    force_rebuild_labels: bool = False
+    force_rebuild_factors: bool = False
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    """Standardized storage layout for interim/processed/output artifacts."""
+
+    interim_root: Path = Path("data/interim")
+    processed_root: Path = Path("data/processed")
+    outputs_root: Path = Path("outputs")
+
+    daily_panel_clean: Path = Path("data/interim/panels/daily_panel_clean.parquet")
+    stock_list_clean: Path = Path("data/interim/metadata/stock_list_clean.parquet")
+    delist_clean: Path = Path("data/interim/metadata/delist_clean.parquet")
+    universe_basic: Path = Path("data/interim/universe/universe_basic.parquet")
+    forward_returns_1d: Path = Path("data/interim/labels/forward_returns_1d.parquet")
+    factor_registry: Path = Path("data/processed/manifest/factor_registry.csv")
+
+
+@dataclass(frozen=True)
+class FactorConfig:
+    """Single-factor run selection for stage-C/D pipeline."""
+
+    family: str = "momentum"
+    name: str = "rs"
+    lookback: int = 20
+    quantiles: int = 5
+
+
+@dataclass(frozen=True)
+class LogConfig:
+    """Lightweight progress logging options."""
+
+    enabled: bool = True
+    verbose: bool = False
+
+
+@dataclass(frozen=True)
+class DebugConfig:
+    """Debug-only output toggles."""
+
+    save_combined_panel: bool = False
+    combined_panel_path: Path = Path("output/pipeline_output_debug.parquet")
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     """Top-level pipeline settings."""
 
     data: DataConfig = DataConfig()
     universe: UniverseConfig = UniverseConfig()
     runtime: RuntimeConfig = RuntimeConfig()
+    cache: CacheConfig = CacheConfig()
+    storage: StorageConfig = StorageConfig()
+    factor: FactorConfig = FactorConfig()
+    log: LogConfig = LogConfig()
+    debug: DebugConfig = DebugConfig()
     factor_lookback_days: int = 20
