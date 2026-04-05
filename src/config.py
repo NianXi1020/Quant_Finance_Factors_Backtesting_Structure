@@ -9,15 +9,17 @@ class DataConfig:
     """Centralized data-path config.
 
     Assumptions:
-    - `daily_path` can be either a single CSV file containing all stocks
-      or a directory containing per-stock CSV files.
+    - `daily_path` points to a directory containing per-stock HFQ files
+      like `000001_daily_hfq.csv`.
+    - loader implementation remains modular, so single-file mode can be
+      supported later via the loader adapter.
     - `stock_list_path` and `delist_path` are single CSV files.
     """
 
-    root: Path = Path("data")
-    daily_path: Path = Path("data/daily_hfq")
-    stock_list_path: Path = Path("data/Stock_list.csv")
-    delist_path: Path = Path("data/delist.csv")
+    root: Path = Path("data/raw/A_share_data")
+    daily_path: Path = Path("data/raw/A_share_data/daily_hfq")
+    stock_list_path: Path = Path("data/raw/A_share_data/Stock_list.csv")
+    delist_path: Path = Path("data/raw/A_share_data/delist.csv")
 
 
 @dataclass(frozen=True)

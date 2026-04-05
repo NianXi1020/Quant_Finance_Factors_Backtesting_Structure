@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -57,35 +58,77 @@ def _parse_cn_date(series: pd.Series) -> pd.Series:
     return parsed.fillna(fallback)
 
 
-def _iter_daily_files(daily_path: Path) -> Iterable[Path]:
-    if daily_path.is_file():
-        yield daily_path
-        return
-    if daily_path.is_dir():
-        for p in sorted(daily_path.glob("*.csv")):
-            yield p
-        return
-    raise FileNotFoundError(f"Daily data path not found: {daily_path}")
+def _iter_daily_files_from_dir(daily_dir: Path, pattern: str = "*_daily_hfq.csv") -> Iterable[Path]:
+    if not daily_dir.exists():
+        raise FileNotFoundError(f"Daily data directory not found: {daily_dir}")
+    if not daily_dir.is_dir():
+        raise NotADirectoryError(f"Expected directory for daily data, got: {daily_dir}")
+
+    files = sorted(daily_dir.glob(pattern))
+    if not files:
+        raise ValueError(f"No daily files matched pattern `{pattern}` under: {daily_dir}")
+
+    yield from files
+
+
+def _infer_stock_code_from_filename(file_path: Path) -> str | None:
+    """Infer stock_code from filenames like `000001_daily_hfq.csv`."""
+    m = re.match(r"^(\d{6})_daily_hfq\.csv$", file_path.name)
+    if m:
+        return m.group(1)
+    return None
+
+
+def load_daily_data_single_file(csv_path: Path) -> pd.DataFrame:
+    """Adapter for potential future single-file daily format."""
+    raw = _read_csv(csv_path)
+    renamed = raw.rename(columns=DAILY_COL_MAP)
+    required = ["date", "stock_code", "close"]
+    missing = [c for c in required if c not in renamed.columns]
+    if missing:
+        raise ValueError(f"{csv_path} missing required columns: {missing}")
+
+    keep_cols = [v for v in DAILY_COL_MAP.values() if v in renamed.columns]
+    cleaned = renamed[keep_cols].copy()
+    cleaned["date"] = _parse_cn_date(cleaned["date"])
+    cleaned["stock_code"] = normalize_stock_code(cleaned["stock_code"])
+    for c in [k for k in ["open", "close", "high", "low", "volume", "amount", "amplitude", "pct_change", "price_change", "turnover"] if k in cleaned.columns]:
+        cleaned[c] = pd.to_numeric(cleaned[c], errors="coerce")
+    cleaned = cleaned.dropna(subset=["date", "stock_code"]).sort_values(["date", "stock_code"])
+    cleaned = ensure_ts_code(cleaned)
+    return cleaned.reset_index(drop=True)
 
 
 def load_daily_data(daily_path: Path) -> pd.DataFrame:
     """Load and clean daily OHLCV-like data.
 
-    Supports either:
-    - a single large file; or
-    - a directory containing per-stock files.
+    Current default mode expects a directory containing per-stock files
+    matching `*_daily_hfq.csv` (e.g., `000001_daily_hfq.csv`).
+
+    Adaptation note:
+    - this function intentionally keeps per-file cleaning modular, so it can
+      be extended later to support single-file input mode if needed.
 
     Key anti-look-ahead assumption:
     - `date` is trade date; later pipeline must shift factor->position before return calc.
     """
     frames: list[pd.DataFrame] = []
-    for file_path in _iter_daily_files(daily_path):
+    for file_path in _iter_daily_files_from_dir(daily_path, pattern="*_daily_hfq.csv"):
         raw = _read_csv(file_path)
         renamed = raw.rename(columns=DAILY_COL_MAP)
-        required = ["date", "stock_code", "close"]
+        required = ["date", "close"]
         missing = [c for c in required if c not in renamed.columns]
         if missing:
             raise ValueError(f"{file_path} missing required columns: {missing}")
+
+        # Some vendor files may omit stock code; infer from filename if needed.
+        if "stock_code" not in renamed.columns:
+            inferred = _infer_stock_code_from_filename(file_path)
+            if inferred is None:
+                raise ValueError(
+                    f"{file_path} has no 股票代码 column and filename does not match `000001_daily_hfq.csv`."
+                )
+            renamed["stock_code"] = inferred
 
         # Keep only known columns if present; this makes schema explicit and stable.
         keep_cols = [v for v in DAILY_COL_MAP.values() if v in renamed.columns]
@@ -113,10 +156,8 @@ def load_daily_data(daily_path: Path) -> pd.DataFrame:
         for c in numeric_cols:
             cleaned[c] = pd.to_numeric(cleaned[c], errors="coerce")
 
-        frames.append(cleaned.dropna(subset=["date", "stock_code"]))
-
-    if not frames:
-        raise ValueError(f"No CSV files found under daily path: {daily_path}")
+        cleaned = cleaned.dropna(subset=["date", "stock_code"]).sort_values("date")
+        frames.append(cleaned)
 
     out = pd.concat(frames, ignore_index=True)
     out = ensure_ts_code(out)

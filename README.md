@@ -9,6 +9,7 @@ It is designed with modular Python code under `src/` to keep data handling, fact
   - Explicit Chinese-to-English schema mapping
   - Robust date parsing (`YYYYMMDD` / `YYYY-MM-DD`)
   - Consistent `stock_code` / `ts_code` normalization
+  - Daily HFQ data loaded from a **directory of per-stock files** (`*_daily_hfq.csv`)
 - **Universe construction**
   - Delisting-aware alive mask (`is_alive`)
   - IPO listing-age filter (`is_old_enough`)
@@ -54,7 +55,16 @@ It is designed with modular Python code under `src/` to keep data handling, fact
 
 ## How to run the main pipeline
 
-1. Place your raw files under `data/` (the pipeline expects configured file names/paths in `src/config.py`).
+1. Place your raw files under `data/raw/A_share_data/` and make sure daily data is organized as:
+
+```text
+data/raw/A_share_data/daily_hfq/
+├── 000001_daily_hfq.csv
+├── 000002_daily_hfq.csv
+├── ...
+```
+
+The default paths are configured in `src/config.py`.
 2. Run:
 
 ```bash
