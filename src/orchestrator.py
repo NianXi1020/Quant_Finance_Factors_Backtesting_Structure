@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.config import PipelineConfig
 from src.evaluation import EvaluationParams, params_to_dict, run_ic_analysis, run_quantile_backtest, save_run_metadata
+from src.evaluation_plots import generate_all_evaluation_plots
 from src.factor_registry import FactorSpec, build_factor_registry, registry_by_key
 from src.factors.basic import compute_macd_family, compute_window_factor, preprocess_single_factor
 from src.pipeline import _shape_info, _build_or_load, _compute_forward_returns_1d, _save_factor_registry
@@ -208,6 +209,10 @@ def _run_one_factor(cfg: PipelineConfig, spec: FactorSpec, shared: dict[str, pd.
     logger.done("Quantile backtest done", t, extra=f"valid_dates={q_diag['valid_quantile_dates']}")
 
     pd.DataFrame([{**ic_metrics, **q_metrics, **ic_diag, **q_diag}]).to_csv(eval_root / "summaries" / "summary_metrics.csv", index=False)
+
+    t = logger.step(f"Evaluation Stage: {spec.key} plots")
+    generate_all_evaluation_plots(eval_root, factor_label=spec.key, rolling_window=126)
+    logger.done("Evaluation plots saved", t, extra=f"path={eval_root / 'plots'}")
 
     metadata = {
         "factor_key": spec.key,

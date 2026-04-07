@@ -214,6 +214,7 @@ Core defaults:
 
 - Pipeline now runs through a factor registry by default instead of one hardcoded factor.
 - Per-factor outputs include `run_metadata.json` and diagnostics CSVs for skip/valid-date transparency.
+- Per-factor outputs now also include a `plots/` folder (LS NAV, quantile NAV/bar, drawdown, rolling metrics, monthly heatmap, IC plots, coverage, turnover placeholder).
 
 ---
 

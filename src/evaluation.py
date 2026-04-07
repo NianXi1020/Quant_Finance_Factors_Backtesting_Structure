@@ -113,6 +113,7 @@ def run_quantile_backtest(df: pd.DataFrame, output_dir: Path, params: Evaluation
     }
 
     qrows: list[dict[str, float]] = []
+    count_rows: list[dict[str, float]] = []
 
     for d in dates:
         g = df.loc[df["date"] == d]
@@ -155,12 +156,21 @@ def run_quantile_backtest(df: pd.DataFrame, output_dir: Path, params: Evaluation
 
         # keep all available quantiles as equal-weight bucket means
         means = valid.groupby("quantile")["fwd_1d_return"].mean()
+        counts = valid.groupby("quantile")["fwd_1d_return"].size()
         for q, val in means.items():
             row[f"Q{int(q)}"] = val
+        row["long_leg"] = row[f"Q{high}"]
+        row["short_leg"] = row["Q1"]
         qrows.append(row)
+
+        crow = {"date": d, "valid_n": len(valid)}
+        for q, n in counts.items():
+            crow[f"Q{int(q)}_n"] = int(n)
+        count_rows.append(crow)
 
     qret = pd.DataFrame(qrows).sort_values("date") if qrows else pd.DataFrame(columns=["date", "long_short"])
     qret.to_csv(output_dir / "quantile_returns.csv", index=False)
+    pd.DataFrame(count_rows).sort_values("date").to_csv(output_dir / "quantile_counts.csv", index=False)
 
     nav_df = qret.copy()
     for c in [c for c in nav_df.columns if c != "date"]:
