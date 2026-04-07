@@ -4,7 +4,7 @@ import argparse
 from dataclasses import replace
 
 from src.config import PipelineConfig
-from src.orchestrator import run_factor_orchestration
+from src.orchestrator import run_factor_orchestration, run_visualization_only
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--use-cached-interim", action="store_true", default=True, help="Reuse cached shared artifacts")
     p.add_argument("--skip-evaluation", action="store_true", help="Compute factor files but skip evaluation")
     p.add_argument("--run-evaluation-only", action="store_true", help="Reuse factor files and run evaluation only")
+    p.add_argument("--run-visualization-only", action="store_true", help="Generate plots only from existing evaluation artifacts")
     return p
 
 
@@ -33,17 +34,27 @@ def main() -> None:
     stage = replace(stage, use_cached_interim=args.use_cached_interim)
     cfg = replace(cfg, stage=stage)
 
-    result = run_factor_orchestration(
-        cfg,
-        factors=args.factors,
-        group=args.group,
-        only_missing=args.only_missing,
-        force=args.force,
-    )
+    if args.run_visualization_only:
+        result = run_visualization_only(
+            cfg,
+            factors=args.factors,
+            group=args.group,
+        )
+    else:
+        result = run_factor_orchestration(
+            cfg,
+            factors=args.factors,
+            group=args.group,
+            only_missing=args.only_missing,
+            force=args.force,
+        )
 
     print("\nRun summary:")
     print(f"  selected: {result['selected']}")
-    print(f"  run: {result['run']}")
+    if "run" in result:
+        print(f"  run: {result['run']}")
+    if "generated" in result:
+        print(f"  generated: {result['generated']}")
     print(f"  skipped: {result['skipped']}")
 
 

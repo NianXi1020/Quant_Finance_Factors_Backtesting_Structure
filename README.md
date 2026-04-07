@@ -199,6 +199,12 @@ python -m src.main --group momentum --skip-evaluation
 
 # Re-evaluate existing factor files only
 python -m src.main --factors rs_60 macd --run-evaluation-only
+
+# Visualization-only from existing evaluation outputs (no recomputation)
+python -m src.main --factors rs_30 --run-visualization-only
+
+# Visualization-only for all registered factors
+python -m src.main --run-visualization-only
 ```
 
 Core defaults:
@@ -209,6 +215,11 @@ Core defaults:
 - weighting = equal,
 - rebalance = daily,
 - quantiles = 10.
+
+Visualization-only mode is useful when IC/quantile outputs already exist and you want to:
+- regenerate plots after changing plot code,
+- debug/report visuals quickly,
+- avoid expensive recomputation of cleaning/factor/evaluation stages.
 
 ### Migration note
 

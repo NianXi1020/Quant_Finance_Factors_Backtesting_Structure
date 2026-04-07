@@ -8,7 +8,7 @@ import time
 import pandas as pd
 
 from src.config import PipelineConfig
-from src.evaluation import EvaluationParams, params_to_dict, run_ic_analysis, run_quantile_backtest, save_run_metadata
+from src.evaluation_core import EvaluationParams, params_to_dict, run_ic_analysis, run_quantile_backtest, save_run_metadata
 from src.evaluation_plots import generate_all_evaluation_plots
 from src.factor_registry import FactorSpec, build_factor_registry, registry_by_key
 from src.factors.basic import compute_macd_family, compute_window_factor, preprocess_single_factor
@@ -16,6 +16,7 @@ from src.pipeline import _shape_info, _build_or_load, _compute_forward_returns_1
 from src.universe import attach_universe_flags
 from src.data.loaders import load_daily_data, load_delist_data, load_stock_list
 from src.utils.progress import StepLogger
+from src.visualization import has_required_evaluation_artifacts, run_visualization_from_saved
 
 
 def _factor_file_path(cfg: PipelineConfig, spec: FactorSpec) -> Path:
@@ -294,3 +295,32 @@ def run_factor_orchestration(
         "run": [s.key for s in to_run],
         "skipped": skipped,
     }
+
+
+def run_visualization_only(
+    cfg: PipelineConfig,
+    *,
+    factors: list[str] | None = None,
+    group: str | None = None,
+) -> dict[str, list[str]]:
+    """Generate plots only from saved evaluation artifacts."""
+    logger = StepLogger(enabled=cfg.log.enabled, verbose=cfg.log.verbose)
+    selected = select_factors(factors=factors, group=group)
+    generated: list[str] = []
+    skipped: list[str] = []
+
+    for spec in selected:
+        eval_root = _factor_eval_root(cfg, spec)
+        t = logger.step(f"Visualization: {spec.key}")
+        if not has_required_evaluation_artifacts(eval_root):
+            print("[SKIP] visualization skipped because evaluation outputs not found")
+            skipped.append(spec.key)
+            continue
+        logger.done("Loaded evaluation artifacts", t)
+
+        t2 = logger.step(f"Visualization plotting: {spec.key}")
+        n = run_visualization_from_saved(eval_root, factor_label=spec.key)
+        logger.done("Plots generated", t2, extra=f"n={n}, path={eval_root / 'plots'}")
+        generated.append(spec.key)
+
+    return {"selected": [s.key for s in selected], "generated": generated, "skipped": skipped}
