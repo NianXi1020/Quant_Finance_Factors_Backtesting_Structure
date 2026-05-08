@@ -242,3 +242,86 @@ Demo notebook:
 
 Current stage focuses on momentum single-factor research infrastructure.
 Planned next stages include multi-factor modeling, return prediction, portfolio construction/optimization, and expanded diagnostics.
+
+---
+
+## ML extension (price-volume only, no financial statements)
+
+The repository now includes an ML extension layer under `src/ml/` that treats **each ML model output as a factor score** and keeps the same factor schema:
+
+`date, ts_code, stock_code, factor_raw, factor_win, factor_z, factor_indneu`.
+
+### Added ML modules
+
+```text
+src/ml/
+  __init__.py
+  build_ml_dataset.py
+  train_utils.py
+  models.py
+  ranking.py
+  pca_factor.py
+  diagnostics.py
+  run_ml_factor.py
+```
+
+### ML data and output layout
+
+```text
+data/processed/ml/
+  ml_feature_panel.parquet
+
+data/processed/factors/ml/
+  ml_rf_return.parquet
+  ml_logit_top_bottom.parquet
+  ml_rank_gbdt.parquet
+  ml_pca_1.parquet
+  ml_pca_2.parquet
+  ml_pca_3.parquet
+```
+
+### Implemented ML methods
+
+1. **Random Forest return regression** (`ml_rf_return`)
+2. **Top-bottom Logistic classification** (`ml_logit_top_bottom`)
+3. **Rank-target Gradient Boosting** (`ml_rank_gbdt`)
+4. **Rolling PCA latent factors** (`ml_pca_1`, `ml_pca_2`, `ml_pca_3`)
+
+### ML feature panel construction
+
+- Merges selected momentum/price-volume factor files by `(date, ts_code, stock_code)`.
+- Merges universe and `fwd_1d_return`.
+- Keeps `in_universe == 1`.
+- Drops missing targets.
+- Supports `feature_version in {factor_z, factor_indneu}` with default `factor_z`.
+- Fills missing feature values by same-date cross-sectional median, then fallback to zero.
+
+### Anti-look-ahead ML training protocol
+
+- Rolling pooled training by date.
+- Default: `train_window=252`, `min_train_dates=126`, `min_train_rows=5000`.
+- For prediction date `t`, train using data up to `t-1` only.
+- Supports `rebalance_freq` = daily / weekly / monthly.
+
+### ML commands
+
+```bash
+# Run all ML methods
+python -m src.ml.run_ml_factor --all
+
+# Run one ML method
+python -m src.ml.run_ml_factor --model rf_return
+python -m src.ml.run_ml_factor --model logit_top_bottom
+python -m src.ml.run_ml_factor --model rank_gbdt
+python -m src.ml.run_ml_factor --model pca
+
+# Force rebuild ML artifacts
+python -m src.ml.run_ml_factor --all --force
+```
+
+### Notes
+
+- ML factors are also added to the factor registry as `family="ml"` for orchestration-level selection.
+- Tree models save feature importance under the corresponding `outputs/single_factor/ml/.../summaries/`.
+- Rolling PCA saves explained variance under:
+  `outputs/single_factor/ml/ml_pca/summaries/explained_variance.csv`.
